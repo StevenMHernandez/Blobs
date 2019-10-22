@@ -19,18 +19,30 @@
 //int16_t ax, ay, az;
 //int16_t gx, gy, gz;
 
+
+#define MAIN_CIRCLE_INDEX 3
+#define NUM_CIRCLES 12
+
+float32 timeStep = 25.0f / 60.0f;
+int32 velocityIterations = 8;
+int32 positionIterations = 3;
+
 b2Vec2 gravity(0.0f, -10.0f);
 b2World world(gravity);
-b2BodyDef groundBodyDef;
-b2PolygonShape groundBox;
+b2BodyDef border_def;
+b2BodyDef ground_def;
+b2Body *border;
+b2Body *ground;
+b2ChainShape chain;
+b2EdgeShape ground_edge;
+b2Body **the_bodies;
 
 #define SHARP_SCK  13
 #define SHARP_MOSI 11
 #define SHARP_SS   10
 
-Adafruit_SharpMem display_raw(SHARP_SCK, SHARP_MOSI, SHARP_SS, 320,
-                              240); // this is only used to compute the gaussian blur
-Adafruit_SharpMem display_final(SHARP_SCK, SHARP_MOSI, SHARP_SS, 320, 240);
+Adafruit_SharpMem display_raw(SHARP_SCK, SHARP_MOSI, SHARP_SS, 320, 240); // used to compute gaussian blur
+Adafruit_SharpMem display_final(SHARP_SCK, SHARP_MOSI, SHARP_SS, 320, 240); // used to render on screen
 
 float one_d_kernel[] = {0.132429, 0.125337, 0.106259, 0.080693, 0.054891, 0.033446, 0.018255, 0.008925, 0.003908,
                         0.001533, 0.000539};
@@ -86,6 +98,83 @@ void print_bitmap() {
     }
 }
 
+void initialize_box2d_objects() {
+    border_def.type = b2_staticBody;
+    ground_def.type = b2_kinematicBody;
+    border = world.CreateBody(&border_def);
+    ground = world.CreateBody(&ground_def);
+
+    // (invisible) borders
+    b2Vec2 vs[4];
+    vs[0].Set(0.0f, 0.0f);
+    vs[1].Set(16.0f, 0.0f);
+    vs[2].Set(16.0f, 12.0f);
+    vs[3].Set(0.0f, 12.0f);
+    chain.CreateLoop(vs, 4);
+    border->CreateFixture(&chain, 0.0f);
+
+    // Ground
+    b2Vec2 v1(-10.0f, 4.0f);
+    b2Vec2 v2(25.0f, 3.0f);
+    ground_edge.Set(v1, v2);
+    ground->CreateFixture(&ground_edge, 0.0f);
+
+    // circles
+    the_bodies = static_cast<b2Body **>(malloc(sizeof(b2Body) * NUM_CIRCLES));
+    for (int i = 0; i < NUM_CIRCLES; ++i) {
+        b2BodyDef bodyDef;
+        bodyDef.type = b2_dynamicBody;
+        bodyDef.allowSleep = true;
+        bodyDef.awake = true;
+        bodyDef.position.Set((float32) i + 2, 6.0f);
+        the_bodies[i] = world.CreateBody(&bodyDef);
+        b2CircleShape circle;
+        circle.m_radius = i == MAIN_CIRCLE_INDEX ? 1.1f : 0.45f;
+
+        b2FixtureDef fixtureDef;
+        fixtureDef.shape = &circle;
+        fixtureDef.density = 1.0f / (i + 1);
+        fixtureDef.friction = 0.3f;
+        the_bodies[i]->CreateFixture(&fixtureDef);
+    }
+}
+
+void render_ground() {
+    b2Fixture *f = ground->GetFixtureList();
+    ground_edge = *((b2EdgeShape *) f->GetShape());
+    ground_edge.m_vertex1 = b2Mul(ground->GetTransform(), ground_edge.m_vertex1);
+    ground_edge.m_vertex2 = b2Mul(ground->GetTransform(), ground_edge.m_vertex2);
+
+    display_raw.drawLine((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
+                         (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20), 1);
+
+    int min_y_ground_vertex = min((int) (ground_edge.m_vertex1.y * 20), (int) (ground_edge.m_vertex2.y * 20));
+    display_raw.fillRect(0, 0, 320, min_y_ground_vertex,
+                         1);
+    display_raw.fillTriangle((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
+                             (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20),
+                             0, min_y_ground_vertex, 1);
+    display_raw.fillTriangle((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
+                             (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20),
+                             320, min_y_ground_vertex, 1);
+}
+
+void render_circles() {
+    for (int i = 0; i < NUM_CIRCLES; ++i) {
+        b2Vec2 position = the_bodies[i]->GetPosition();
+        display_raw.fillCircle((int) (position.x * 20.0f), (int) (position.y * 20.0f),
+                               (int) (i == MAIN_CIRCLE_INDEX ? 22 : 9), 1);
+    }
+}
+
+void render_face() {
+    b2Vec2 position = the_bodies[3]->GetPosition();
+    display_raw.fillCircle((int) (position.x * 20.0f) + 14, (int) (position.y * 20.0f) + 15, 8, 0);
+    display_raw.drawCircle((int) (position.x * 20.0f) + 14, (int) (position.y * 20.0f) + 15, 8, 1);
+    display_raw.fillCircle((int) (position.x * 20.0f) + -1, (int) (position.y * 20.0f) + 17, 8, 0);
+    display_raw.drawCircle((int) (position.x * 20.0f) + -1, (int) (position.y * 20.0f) + 17, 8, 1);
+}
+
 void setup() {
     Serial.begin(921600);
 
@@ -103,117 +192,12 @@ void setup() {
     display_raw.begin();
     display_final.begin();
 
-    b2BodyDef border_def;
-    b2BodyDef ground_def;
-    border_def.type = b2_staticBody;
-    ground_def.type = b2_kinematicBody;
-    b2Body *border = world.CreateBody(&border_def);
-    b2Body *ground = world.CreateBody(&ground_def);
-
-    // borders
-    b2Vec2 vs[4];
-    vs[0].Set(0.0f, 0.0f);
-    vs[1].Set(16.0f, 0.0f);
-    vs[2].Set(16.0f, 12.0f);
-    vs[3].Set(0.0f, 12.0f);
-    b2ChainShape chain;
-    chain.CreateLoop(vs, 4);
-    border->CreateFixture(&chain, 0.0f);
-
-    // Ground
-    b2Vec2 v1(-10.0f, 4.0f);
-    b2Vec2 v2(25.0f, 3.0f);
-    b2EdgeShape ground_edge;
-    ground_edge.Set(v1, v2);
-    ground->CreateFixture(&ground_edge, 0.0f);
-
-#define MAIN_CIRCLE_INDEX 3
-    int num_circles = 12;
-    b2Body **the_bodies = static_cast<b2Body **>(malloc(sizeof(b2Body) * num_circles));
-
-    for (int i = 0; i < num_circles; ++i) {
-        b2BodyDef bodyDef;
-        bodyDef.type = b2_dynamicBody;
-        bodyDef.allowSleep = true;
-        bodyDef.awake = true;
-        bodyDef.position.Set((float32) i + 2, 6.0f);
-        the_bodies[i] = world.CreateBody(&bodyDef);
-        b2CircleShape circle;
-        circle.m_radius = i == MAIN_CIRCLE_INDEX ? 1.1f : 0.45f;
-
-        b2FixtureDef fixtureDef;
-        fixtureDef.shape = &circle;
-        fixtureDef.density = 1.0f / (i + 1);
-        fixtureDef.friction = 0.3f;
-        the_bodies[i]->CreateFixture(&fixtureDef);
-    }
-
-    float32 timeStep = 25.0f / 60.0f;
-    int32 velocityIterations = 8;
-    int32 positionIterations = 3;
+    initialize_box2d_objects();
 
     ground->SetAngularVelocity(0.075);
-
-    for (int32 t = 0; t < 2000; ++t) { // simulator time step
-        Serial.println(t);
-        display_raw.fillScreen(0);
-
-        if (t > 0 and t % 5 == 0) {
-            ground->SetAngularVelocity(t % 10 == 0 ? 0.1 : -0.1);
-//            ground->SetLinearVelocity(b2Vec2(0.0, 0.1));
-        }
-        world.Step(timeStep, velocityIterations, positionIterations);
-
-        /*
-         * Draw Ground Edge
-         */
-        b2Vec2 edge_position = ground->GetPosition();
-        b2Fixture *f = ground->GetFixtureList();
-        ground_edge = *((b2EdgeShape *) f->GetShape());
-        ground_edge.m_vertex1 = b2Mul(ground->GetTransform(), ground_edge.m_vertex1);
-        ground_edge.m_vertex2 = b2Mul(ground->GetTransform(), ground_edge.m_vertex2);
-
-        display_raw.drawLine((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
-                             (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20), 1);
-
-        int min_y_ground_vertex = min((int) (ground_edge.m_vertex1.y * 20), (int) (ground_edge.m_vertex2.y * 20));
-        display_raw.fillRect(0, 0, 320, min_y_ground_vertex,
-                             1);
-        display_raw.fillTriangle((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
-                                 (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20),
-                                 0,min_y_ground_vertex,1);
-        display_raw.fillTriangle((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
-                                 (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20),
-                                 320,min_y_ground_vertex,1);
-
-        /*
-         * Draw Circles
-         */
-        for (int i = 0; i < num_circles; ++i) {
-            b2Vec2 position = the_bodies[i]->GetPosition();
-            display_raw.fillCircle((int) (position.x * 20.0f), (int) (position.y * 20.0f), (int) (i == MAIN_CIRCLE_INDEX ? 22 : 9), 1);
-        }
-//        gaussian_blur_all();
-
-        /*
-         * Draw Face
-         */
-        b2Vec2 position = the_bodies[3]->GetPosition();
-        float32 angle = the_bodies[3]->GetAngle();
-        display_raw.fillCircle((int) (position.x * 20.0f) + 14, (int) (position.y * 20.0f) + 15, 8, 0);
-        display_raw.drawCircle((int) (position.x * 20.0f) + 14, (int) (position.y * 20.0f) + 15, 8, 1);
-        display_raw.fillCircle((int) (position.x * 20.0f) + -1, (int) (position.y * 20.0f) + 17, 8, 0);
-        display_raw.drawCircle((int) (position.x * 20.0f) + -1, (int) (position.y * 20.0f) + 17, 8, 1);
-
-        /*
-         * Final
-         */
-        print_bitmap();
-        Serial.println("======");
-        delay(250);
-    }
-
 }
+
+int t = 0;
 
 void loop() {
 //    if (rfidReader.PICC_IsNewCardPresent() and rfidReader.PICC_ReadCardSerial()) {
@@ -229,4 +213,29 @@ void loop() {
 //    Serial.print(gx); Serial.print("\t");
 //    Serial.print(gy); Serial.print("\t");
 //    Serial.println(gz);
+
+
+    Serial.println(t);
+
+    if (t > 0 and t % 5 == 0) {
+        ground->SetAngularVelocity(t % 10 == 0 ? 0.1 : -0.1);
+//            ground->SetLinearVelocity(b2Vec2(0.0, 0.1));
+    }
+
+    world.Step(timeStep, velocityIterations, positionIterations);
+
+    display_raw.fillScreen(0);
+    render_ground();
+    render_circles();
+//    gaussian_blur_all();
+    render_face();
+
+    /*
+     * Final
+     */
+    print_bitmap();
+    Serial.println("======");
+    delay(250);
+
+    t++;
 }
