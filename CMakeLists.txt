@@ -67,6 +67,6 @@ add_executable(${PROJECT_NAME} ${SRC_LIST})
 
 include_directories(./.piolibdeps/MFRC522_ID63/src)
 include_directories(./.piolibdeps/MPU6050_ID2892/src)
-include_directories(./.piolibdeps/Adafruit GFX Library_ID13)
-include_directories(./.piolibdeps/Adafruit SHARP Memory Display_ID414)
+include_directories(./.piolibdeps/Adafruit\ GFX\ Library_ID13)
+include_directories(./.piolibdeps/Adafruit\ SHARP\ Memory\ Display_ID414)
 include_directories(./.piolibdeps/Box2D)
