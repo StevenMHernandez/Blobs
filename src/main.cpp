@@ -23,7 +23,7 @@
 #define MAIN_CIRCLE_INDEX 3
 #define NUM_CIRCLES 12
 
-float32 timeStep = 25.0f / 60.0f;
+float32 timeStep = 10.0f / 60.0f;
 int32 velocityIterations = 8;
 int32 positionIterations = 3;
 
@@ -36,6 +36,9 @@ b2Body *ground;
 b2ChainShape chain;
 b2EdgeShape ground_edge;
 b2Body **the_bodies;
+
+bool was_upside_down = false;
+bool is_upside_down = false;
 
 #define SHARP_SCK  13
 #define SHARP_MOSI 11
@@ -89,7 +92,7 @@ void gaussian_blur_all() {
  * Print a simple bitmap representation to the serial monitor for initial debugging
  */
 void print_bitmap() {
-    int print_every_n = 4;
+    int print_every_n = 8;
     for (uint16_t i = 239; i > 10; i -= print_every_n) {
         for (uint16_t j = 319; j > 10; j -= print_every_n) {
             Serial.print(display_raw.getPixel(j, i) ? "@" : "`");
@@ -148,9 +151,10 @@ void render_ground() {
     display_raw.drawLine((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
                          (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20), 1);
 
-    int min_y_ground_vertex = min((int) (ground_edge.m_vertex1.y * 20), (int) (ground_edge.m_vertex2.y * 20));
-    display_raw.fillRect(0, 0, 320, min_y_ground_vertex,
-                         1);
+    int min_y_ground_vertex = is_upside_down ? max((int) (ground_edge.m_vertex1.y * 20), (int) (ground_edge.m_vertex2.y * 20)) : min((int) (ground_edge.m_vertex1.y * 20), (int) (ground_edge.m_vertex2.y * 20));
+    if (!is_upside_down || min_y_ground_vertex < 240) {
+        display_raw.fillRect(0, is_upside_down ? min_y_ground_vertex : 0, 320,is_upside_down ? 240 - min_y_ground_vertex : min_y_ground_vertex, 1);
+    }
     display_raw.fillTriangle((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
                              (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20),
                              0, min_y_ground_vertex, 1);
@@ -169,10 +173,11 @@ void render_circles() {
 
 void render_face() {
     b2Vec2 position = the_bodies[3]->GetPosition();
-    display_raw.fillCircle((int) (position.x * 20.0f) + 14, (int) (position.y * 20.0f) + 15, 8, 0);
-    display_raw.drawCircle((int) (position.x * 20.0f) + 14, (int) (position.y * 20.0f) + 15, 8, 1);
-    display_raw.fillCircle((int) (position.x * 20.0f) + -1, (int) (position.y * 20.0f) + 17, 8, 0);
-    display_raw.drawCircle((int) (position.x * 20.0f) + -1, (int) (position.y * 20.0f) + 17, 8, 1);
+    int multiplier = is_upside_down ? -1 : 1;
+    display_raw.fillCircle((int) (position.x * 20.0f) + (multiplier * 14), (int) (position.y * 20.0f) + (multiplier * 15), 8, 0);
+    display_raw.drawCircle((int) (position.x * 20.0f) + (multiplier * 14), (int) (position.y * 20.0f) + (multiplier * 15), 8, 1);
+    display_raw.fillCircle((int) (position.x * 20.0f) + (multiplier * -1), (int) (position.y * 20.0f) + (multiplier * 17), 8, 0);
+    display_raw.drawCircle((int) (position.x * 20.0f) + (multiplier * -1), (int) (position.y * 20.0f) + (multiplier * 17), 8, 1);
 }
 
 void setup() {
@@ -194,7 +199,7 @@ void setup() {
 
     initialize_box2d_objects();
 
-    ground->SetAngularVelocity(0.075);
+    ground->SetAngularVelocity(0.0075);
 }
 
 int t = 0;
@@ -214,11 +219,25 @@ void loop() {
 //    Serial.print(gy); Serial.print("\t");
 //    Serial.println(gz);
 
+    if (t % 50 == 0) {
+        if (t % 100 == 0) {
+            is_upside_down = false;
+        } else {
+            is_upside_down = true;
+        }
+    }
+    if (was_upside_down != is_upside_down) {
+        world.SetGravity(b2Vec2(0, is_upside_down ? 10 : -10));
+        if (is_upside_down) {
+            ground->SetTransform(b2Vec2(0, 5.5f), 0);
+        } else {
+            ground->SetTransform(b2Vec2(0, 0.0f), 0);
+        }
+        was_upside_down = is_upside_down;
+    }
 
-    Serial.println(t);
-
-    if (t > 0 and t % 5 == 0) {
-        ground->SetAngularVelocity(t % 10 == 0 ? 0.1 : -0.1);
+    if (t > 0 and t % 15 == 0) {
+        ground->SetAngularVelocity(t % 30 == 0 ? 0.01 : -0.01);
 //            ground->SetLinearVelocity(b2Vec2(0.0, 0.1));
     }
 
@@ -235,7 +254,6 @@ void loop() {
      */
     print_bitmap();
     Serial.println("======");
-    delay(250);
 
     t++;
 }
