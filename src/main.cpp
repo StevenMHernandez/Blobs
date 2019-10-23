@@ -50,40 +50,48 @@ Adafruit_SharpMem display_final(SHARP_SCK, SHARP_MOSI, SHARP_SS, 320, 240); // u
 float one_d_kernel[] = {0.132429, 0.125337, 0.106259, 0.080693, 0.054891, 0.033446, 0.018255, 0.008925, 0.003908,
                         0.001533, 0.000539};
 
-uint8_t gaussian_blur_i(int x, int y) {
-    if (display_raw.getPixel(x, y)) {
-        return 1;
-    }
+float image_sums[240][320];
 
-    float sum = 0;
-    for (int i = 0; i < 8; ++i) {
-        int lr_s[] = {-i, 0, i};
-        int ud_s[] = {-i, 0, i};
-        for (int lr = 0; lr <= 2; lr++) {
-            int left_right = lr_s[lr];
-            for (int ud = 0; ud <= 2; ud++) {
-                int up_down = ud_s[ud];
-                if (x + left_right > 0 && x + left_right < 320 && x + left_right > 0 && y + up_down < 240 &&
-                    display_raw.getPixel(x + left_right, y + up_down)) {
-                    sum += one_d_kernel[i - 1];
-                }
-            }
+float gaussian_blur_i(int x, int y, bool is_horizontal) {
+    int d = is_horizontal ? x : y;
+    float out = 0;
+
+    out = 100.0f * image_sums[x][y] * one_d_kernel[0];
+
+    for (int i = 1; i < 11; i++) {
+        if (d-i > 0) {
+            int add_to_x = is_horizontal ? -i : 0;
+            int add_to_y = !is_horizontal ? -i : 0;
+            out += 100.0f * image_sums[x + add_to_x][y + add_to_y] * one_d_kernel[i];
         }
-
-        if (sum > 2.4) {
-            return 1;
+        if (d-i < (is_horizontal ? 320 : 240)) {
+            int add_to_x = is_horizontal ? i : 0;
+            int add_to_y = !is_horizontal ? i : 0;
+            out += 100.0f * image_sums[x + add_to_x][y + add_to_y] * one_d_kernel[i];
         }
     }
 
-    return 0;
+    return out;
 }
 
 void gaussian_blur_all() {
+    // Setup Initial values
     for (uint16_t i = 0; i < 240; i++) {
         for (uint16_t j = 0; j < 320; j++) {
-            display_raw.drawPixel(i, j, gaussian_blur_i(i, j));
-            display_raw.drawPixel(i, j, gaussian_blur_i(i, j));
-            display_final.drawPixel(i, j, gaussian_blur_i(i, j));
+            image_sums[i][j] = 100.0f * (float) display_raw.getPixel(i,j);
+        }
+    }
+    // Apply gaussian blur horizontally
+    for (uint16_t i = 0; i < 240; i++) {
+        for (uint16_t j = 0; j < 320; j++) {
+            image_sums[i][j] = gaussian_blur_i(i, j, true);
+        }
+    }
+    // Apply gaussian blur vertically and apply to display output buffer
+    for (uint16_t i = 0; i < 240; i++) {
+        for (uint16_t j = 0; j < 320; j++) {
+            float out = gaussian_blur_i(i,j, false);
+            display_final.drawPixel(i, j, out > 20);
         }
     }
 }
@@ -99,6 +107,7 @@ void print_bitmap() {
         }
         Serial.print("\n");
     }
+    Serial.flush();
 }
 
 void initialize_box2d_objects() {
@@ -138,6 +147,7 @@ void initialize_box2d_objects() {
         fixtureDef.shape = &circle;
         fixtureDef.density = 1.0f / (i + 1);
         fixtureDef.friction = 0.3f;
+        fixtureDef.restitution=0.75;
         the_bodies[i]->CreateFixture(&fixtureDef);
     }
 }
@@ -172,7 +182,7 @@ void render_circles() {
 }
 
 void render_face() {
-    b2Vec2 position = the_bodies[3]->GetPosition();
+    b2Vec2 position = the_bodies[MAIN_CIRCLE_INDEX]->GetPosition();
     int multiplier = is_upside_down ? -1 : 1;
     display_raw.fillCircle((int) (position.x * 20.0f) + (multiplier * 14), (int) (position.y * 20.0f) + (multiplier * 15), 8, 0);
     display_raw.drawCircle((int) (position.x * 20.0f) + (multiplier * 14), (int) (position.y * 20.0f) + (multiplier * 15), 8, 1);
