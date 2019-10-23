@@ -19,6 +19,7 @@
 //int16_t ax, ay, az;
 //int16_t gx, gy, gz;
 
+#define DEG2RAD(deg) (0.0174533 * deg)
 
 #define MAIN_CIRCLE_INDEX 3
 #define NUM_CIRCLES 12
@@ -59,12 +60,12 @@ float gaussian_blur_i(int x, int y, bool is_horizontal) {
     out = 100.0f * image_sums[x][y] * one_d_kernel[0];
 
     for (int i = 1; i < 11; i++) {
-        if (d-i > 0) {
+        if (d - i > 0) {
             int add_to_x = is_horizontal ? -i : 0;
             int add_to_y = !is_horizontal ? -i : 0;
             out += 100.0f * image_sums[x + add_to_x][y + add_to_y] * one_d_kernel[i];
         }
-        if (d-i < (is_horizontal ? 320 : 240)) {
+        if (d - i < (is_horizontal ? 320 : 240)) {
             int add_to_x = is_horizontal ? i : 0;
             int add_to_y = !is_horizontal ? i : 0;
             out += 100.0f * image_sums[x + add_to_x][y + add_to_y] * one_d_kernel[i];
@@ -78,7 +79,7 @@ void gaussian_blur_all() {
     // Setup Initial values
     for (uint16_t i = 0; i < 240; i++) {
         for (uint16_t j = 0; j < 320; j++) {
-            image_sums[i][j] = 100.0f * (float) display_raw.getPixel(i,j);
+            image_sums[i][j] = 100.0f * (float) display_raw.getPixel(i, j);
         }
     }
     // Apply gaussian blur horizontally
@@ -90,7 +91,7 @@ void gaussian_blur_all() {
     // Apply gaussian blur vertically and apply to display output buffer
     for (uint16_t i = 0; i < 240; i++) {
         for (uint16_t j = 0; j < 320; j++) {
-            float out = gaussian_blur_i(i,j, false);
+            float out = gaussian_blur_i(i, j, false);
             display_final.drawPixel(i, j, out > 20);
         }
     }
@@ -102,7 +103,7 @@ void gaussian_blur_all() {
 void print_bitmap() {
     int print_every_n = 8;
     for (uint16_t i = 239; i > 10; i -= print_every_n) {
-        for (uint16_t j = 319; j > 10; j -= print_every_n) {
+        for (uint16_t j = 0; j < 310; j += print_every_n) {
             Serial.print(display_raw.getPixel(j, i) ? "@" : "`");
         }
         Serial.print("\n");
@@ -113,6 +114,7 @@ void print_bitmap() {
 void initialize_box2d_objects() {
     border_def.type = b2_staticBody;
     ground_def.type = b2_kinematicBody;
+    ground_def.position = b2Vec2(8.0, 6.0);
     border = world.CreateBody(&border_def);
     ground = world.CreateBody(&ground_def);
 
@@ -126,8 +128,8 @@ void initialize_box2d_objects() {
     border->CreateFixture(&chain, 0.0f);
 
     // Ground
-    b2Vec2 v1(-10.0f, 4.0f);
-    b2Vec2 v2(25.0f, 3.0f);
+    b2Vec2 v1(-16.0f, 0.0f);
+    b2Vec2 v2(16.0f, 0.0f);
     ground_edge.Set(v1, v2);
     ground->CreateFixture(&ground_edge, 0.0f);
 
@@ -147,7 +149,7 @@ void initialize_box2d_objects() {
         fixtureDef.shape = &circle;
         fixtureDef.density = 1.0f / (i + 1);
         fixtureDef.friction = 0.3f;
-        fixtureDef.restitution=0.75;
+        fixtureDef.restitution = 0.75;
         the_bodies[i]->CreateFixture(&fixtureDef);
     }
 }
@@ -184,10 +186,14 @@ void render_circles() {
 void render_face() {
     b2Vec2 position = the_bodies[MAIN_CIRCLE_INDEX]->GetPosition();
     int multiplier = is_upside_down ? -1 : 1;
-    display_raw.fillCircle((int) (position.x * 20.0f) + (multiplier * 14), (int) (position.y * 20.0f) + (multiplier * 15), 8, 0);
-    display_raw.drawCircle((int) (position.x * 20.0f) + (multiplier * 14), (int) (position.y * 20.0f) + (multiplier * 15), 8, 1);
-    display_raw.fillCircle((int) (position.x * 20.0f) + (multiplier * -1), (int) (position.y * 20.0f) + (multiplier * 17), 8, 0);
-    display_raw.drawCircle((int) (position.x * 20.0f) + (multiplier * -1), (int) (position.y * 20.0f) + (multiplier * 17), 8, 1);
+    display_raw.fillCircle((int) (position.x * 20.0f) + (multiplier * 14),
+                           (int) (position.y * 20.0f) + (multiplier * 15), 8, 0);
+    display_raw.drawCircle((int) (position.x * 20.0f) + (multiplier * 14),
+                           (int) (position.y * 20.0f) + (multiplier * 15), 8, 1);
+    display_raw.fillCircle((int) (position.x * 20.0f) + (multiplier * -1),
+                           (int) (position.y * 20.0f) + (multiplier * 17), 8, 0);
+    display_raw.drawCircle((int) (position.x * 20.0f) + (multiplier * -1),
+                           (int) (position.y * 20.0f) + (multiplier * 17), 8, 1);
 }
 
 void setup() {
@@ -229,27 +235,58 @@ void loop() {
 //    Serial.print(gy); Serial.print("\t");
 //    Serial.println(gz);
 
-    if (t % 50 == 0) {
-        if (t % 100 == 0) {
-            is_upside_down = false;
-        } else {
-            is_upside_down = true;
-        }
+    int angle = t;
+    bool angle_is_negative = angle < 0;
+    angle = abs(angle);
+    angle = angle % 360;
+
+    if ((!is_upside_down && angle > 135 && 225 > angle) || (is_upside_down && (angle > 305 || 45 > angle))) {
+        is_upside_down = !is_upside_down;
     }
+
+    /*
+     * Determine goal-angle of the ground
+     */
+    float goal_a = angle * (is_upside_down ? -1 : 1);
+    if (goal_a > 20 && goal_a < 180) {
+        goal_a = DEG2RAD(20);
+    } else if (goal_a > 180 && goal_a < 340) {
+        goal_a = DEG2RAD(340);
+    } else {
+        goal_a = DEG2RAD(goal_a);
+    }
+    if (goal_a > 90 && goal_a < 180) {
+        goal_a = DEG2RAD(180);
+    }
+    if (goal_a > 180 && goal_a < 270) {
+        goal_a = DEG2RAD(270);
+    }
+
+    /*
+     * Update the position of the ground
+     */
     if (was_upside_down != is_upside_down) {
         world.SetGravity(b2Vec2(0, is_upside_down ? 10 : -10));
         if (is_upside_down) {
-            ground->SetTransform(b2Vec2(0, 5.5f), 0);
+            ground->SetTransform(b2Vec2(8, 9.0f), 0);
         } else {
-            ground->SetTransform(b2Vec2(0, 0.0f), 0);
+            ground->SetTransform(b2Vec2(8, 4.0f), goal_a * (angle_is_negative ? -1 : 1));
         }
         was_upside_down = is_upside_down;
     }
 
-    if (t > 0 and t % 15 == 0) {
-        ground->SetAngularVelocity(t % 30 == 0 ? 0.01 : -0.01);
-//            ground->SetLinearVelocity(b2Vec2(0.0, 0.1));
+
+    if (!is_upside_down) {
+        float current_a = ground->GetAngle() * (angle_is_negative ? -1 : 1);
+        float option_a = goal_a - current_a;
+        float option_b = goal_a - current_a + (2 * b2_pi);
+        if (abs(option_a) < abs(option_b)) {
+            ground->SetAngularVelocity(option_a * (angle_is_negative ? -1 : 1));
+        } else {
+            ground->SetAngularVelocity(option_b * (angle_is_negative ? -1 : 1));
+        }
     }
+
 
     world.Step(timeStep, velocityIterations, positionIterations);
 
@@ -266,4 +303,5 @@ void loop() {
     Serial.println("======");
 
     t++;
+//    t--;
 }
