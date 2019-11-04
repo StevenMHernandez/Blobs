@@ -1,23 +1,67 @@
+#define ARDUINO_MAIN
+#include <Box2D/Box2D.h>
 #include <stdio.h>
 #include <math.h>
 #include <HardwareSerial.h>
-//#include <Arduino.h>
-//#include <Wire.h>
-//#include <SPI.h>
-//#include <MFRC522.h>
-//#include <MPU6050.h>
-#include <Box2D/Box2D.h>
+#include <Wire.h>
+#include <SPI.h>
+#include <MPU6050.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SharpMem.h>
+#include "Arduino.h"
+
+// Weak empty variant initialization function.
+// May be redefined by variant files.
+void initVariant() __attribute__((weak));
+void initVariant() { }
+
+// Initialize C library
+extern "C" void __libc_init_array(void);
+
+/*
+ * \brief Main entry point of Arduino application
+ */
+int main( void )
+{
+    init();
+
+    __libc_init_array();
+
+    initVariant();
+
+    delay(1);
+
+#if defined(USE_TINYUSB)
+    Adafruit_TinyUSB_Core_init();
+#elif defined(USBCON)
+    USBDevice.init();
+    USBDevice.attach();
+#endif
+
+    setup();
+
+    for (;;)
+    {
+        loop();
+        yield(); // yield run usb background task
+
+        if (serialEventRun) serialEventRun();
+    }
+
+    return 0;
+}
+
+
+
 
 //#define RST_PIN         5
-//#define SS_PIN          53
+//#define SS_PIN          9
 //
 //MFRC522 rfidReader(SS_PIN, RST_PIN);
-//
-//MPU6050 accelGyro;
-//int16_t ax, ay, az;
-//int16_t gx, gy, gz;
+
+MPU6050 accelGyro;
+int16_t ax, ay, az;
+int16_t gx, gy, gz;
 
 #define DEG2RAD(deg) (0.0174533 * deg)
 
@@ -92,7 +136,7 @@ void gaussian_blur_all() {
     for (uint16_t i = 0; i < 240; i++) {
         for (uint16_t j = 0; j < 320; j++) {
             float out = gaussian_blur_i(i, j, false);
-            display_final.drawPixel(i, j, out > 20);
+//            display_final.drawPixel(i, j, out > 20);
         }
     }
 }
@@ -199,16 +243,10 @@ void render_face() {
 void setup() {
     Serial.begin(921600);
 
-//    Wire.begin();
-//    SPI.begin();
-//
-//    accelGyro.initialize();
-//
-//    rfidReader.PCD_Init();
-//    // Delay (potentially) required for MFRC522
-//    delay(100);
-//
-//    rfidReader.PCD_DumpVersionToSerial();
+    Wire.begin();
+    SPI.begin();
+
+    accelGyro.initialize();
 
     display_raw.begin();
     display_final.begin();
@@ -218,27 +256,18 @@ void setup() {
     ground->SetAngularVelocity(0.0075);
 }
 
-int t = 0;
-
 void loop() {
-//    if (rfidReader.PICC_IsNewCardPresent() and rfidReader.PICC_ReadCardSerial()) {
-//        rfidReader.PICC_DumpToSerial(&(rfidReader.uid));
-//    }
-//
-//    accelGyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-//
-//    Serial.print("a/g:\t");
-//    Serial.print(ax); Serial.print("\t");
-//    Serial.print(ay); Serial.print("\t");
-//    Serial.print(az); Serial.print("\t");
-//    Serial.print(gx); Serial.print("\t");
-//    Serial.print(gy); Serial.print("\t");
-//    Serial.println(gz);
+    accelGyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
-    int angle = t;
+    int angle = (int) (ay > 0 ? (90.0*(min(ay, 16000.0) / 16000.0))
+                       : (90.0*(max(ay, -16000.0) / 16000.0)));
+
+    // if upsidedown
+    angle = ax < -1000 ? 180 : angle;
+
     bool angle_is_negative = angle < 0;
     angle = abs(angle);
-    angle = angle % 360;
+    angle = (int) angle % 360;
 
     if ((!is_upside_down && angle > 135 && 225 > angle) || (is_upside_down && (angle > 305 || 45 > angle))) {
         is_upside_down = !is_upside_down;
@@ -269,6 +298,7 @@ void loop() {
         world.SetGravity(b2Vec2(0, is_upside_down ? 10 : -10));
         if (is_upside_down) {
             ground->SetTransform(b2Vec2(8, 9.0f), 0);
+            ground->SetAngularVelocity(0);
         } else {
             ground->SetTransform(b2Vec2(8, 4.0f), goal_a * (angle_is_negative ? -1 : 1));
         }
@@ -301,7 +331,4 @@ void loop() {
      */
     print_bitmap();
     Serial.println("======");
-
-    t++;
-//    t--;
 }
