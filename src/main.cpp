@@ -230,6 +230,13 @@ void render_circles() {
 void render_face() {
     b2Vec2 position = the_bodies[MAIN_CIRCLE_INDEX]->GetPosition();
     int multiplier = is_upside_down ? -1 : 1;
+
+    // mouth
+    display_raw.drawCircle((int) (position.x * 20.0f) + (multiplier * 5),
+                           (int) (position.y * 20.0f) + (multiplier * 5), 5, 0);
+    display_raw.fillRect((int) (position.x * 20.0f) + (multiplier * 5) - 5,
+                         (int) (position.y * 20.0f) + (multiplier * 5) - 3, 15, 9, 1);
+
     display_raw.fillCircle((int) (position.x * 20.0f) + (multiplier * 14),
                            (int) (position.y * 20.0f) + (multiplier * 15), 8, 0);
     display_raw.drawCircle((int) (position.x * 20.0f) + (multiplier * 14),
@@ -238,6 +245,24 @@ void render_face() {
                            (int) (position.y * 20.0f) + (multiplier * 17), 8, 0);
     display_raw.drawCircle((int) (position.x * 20.0f) + (multiplier * -1),
                            (int) (position.y * 20.0f) + (multiplier * 17), 8, 1);
+
+    // pupils
+    bool is_looking_up = false;
+    bool is_looking_down = false;
+    bool is_looking_backwards = false;
+
+    int left_movement = is_looking_backwards ? -2 : 2;
+    int up_down_movement = 0;
+    if (is_looking_up) {
+        up_down_movement += 2;
+    }
+    if (is_looking_down) {
+        up_down_movement -= 2;
+    }
+    display_raw.fillCircle((int) (position.x * 20.0f) + (multiplier * 14) + left_movement,
+                           (int) (position.y * 20.0f) + (multiplier * 15) + up_down_movement, 1, 1);
+    display_raw.fillCircle((int) (position.x * 20.0f) + (multiplier * -1) + left_movement,
+                           (int) (position.y * 20.0f) + (multiplier * 17) + up_down_movement, 1, 1);
 }
 
 void setup() {
