@@ -1,4 +1,5 @@
 #define ARDUINO_MAIN
+
 #include <Box2D/Box2D.h>
 #include <stdio.h>
 #include <math.h>
@@ -9,11 +10,13 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SharpMem.h>
 #include "Arduino.h"
+#include <Adafruit_PN532.h>
 
 // Weak empty variant initialization function.
 // May be redefined by variant files.
 void initVariant() __attribute__((weak));
-void initVariant() { }
+
+void initVariant() {}
 
 // Initialize C library
 extern "C" void __libc_init_array(void);
@@ -21,8 +24,7 @@ extern "C" void __libc_init_array(void);
 /*
  * \brief Main entry point of Arduino application
  */
-int main( void )
-{
+int main(void) {
     init();
 
     __libc_init_array();
@@ -40,8 +42,7 @@ int main( void )
 
     setup();
 
-    for (;;)
-    {
+    for (;;) {
         loop();
         yield(); // yield run usb background task
 
@@ -54,10 +55,13 @@ int main( void )
 
 
 
-//#define RST_PIN         5
-//#define SS_PIN          9
-//
-//MFRC522 rfidReader(SS_PIN, RST_PIN);
+#define PN532_IRQ   (4)
+#define PN532_SCK  (13)
+#define PN532_MOSI (11)
+#define PN532_SS   (9)
+#define PN532_MISO (12)
+
+Adafruit_PN532 nfc(PN532_SCK, PN532_MISO, PN532_MOSI, PN532_SS);
 
 MPU6050 accelGyro;
 int16_t ax, ay, az;
@@ -208,9 +212,12 @@ void render_ground() {
     display_raw.drawLine((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
                          (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20), 1);
 
-    int min_y_ground_vertex = is_upside_down ? max((int) (ground_edge.m_vertex1.y * 20), (int) (ground_edge.m_vertex2.y * 20)) : min((int) (ground_edge.m_vertex1.y * 20), (int) (ground_edge.m_vertex2.y * 20));
+    int min_y_ground_vertex = is_upside_down ? max((int) (ground_edge.m_vertex1.y * 20),
+                                                   (int) (ground_edge.m_vertex2.y * 20)) : min(
+                                      (int) (ground_edge.m_vertex1.y * 20), (int) (ground_edge.m_vertex2.y * 20));
     if (!is_upside_down || min_y_ground_vertex < 240) {
-        display_raw.fillRect(0, is_upside_down ? min_y_ground_vertex : 0, 320,is_upside_down ? 240 - min_y_ground_vertex : min_y_ground_vertex, 1);
+        display_raw.fillRect(0, is_upside_down ? min_y_ground_vertex : 0, 320,
+                             is_upside_down ? 240 - min_y_ground_vertex : min_y_ground_vertex, 1);
     }
     display_raw.fillTriangle((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
                              (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20),
@@ -266,6 +273,11 @@ void render_face() {
                            (int) (position.y * 20.0f) + (multiplier * 17) + up_down_movement, 1, 1);
 }
 
+bool rfid_tag_present = false;
+void handleInterruptFalling() {
+    rfid_tag_present = true;
+}
+
 void setup() {
     Serial.begin(921600);
 
@@ -280,13 +292,32 @@ void setup() {
     initialize_box2d_objects();
 
     ground->SetAngularVelocity(0.0075);
+
+    pinMode(PN532_IRQ, INPUT_PULLUP);
+    nfc.startPassiveTargetIDDetection(PN532_MIFARE_ISO14443A);
+    attachInterrupt(digitalPinToInterrupt(PN532_IRQ), handleInterruptFalling, FALLING);
+    nfc.begin();
+    nfc.SAMConfig();
 }
 
+int t = 0;
 void loop() {
+    uint8_t uid[] = {0, 0, 0, 0, 0, 0, 0};
+    uint8_t uidLength;
+
+    if (t % 10 == 0 && rfid_tag_present) {
+        nfc.readDetectedPassiveTargetID(uid, &uidLength);
+        nfc.PrintHex(uid, uidLength);
+        Serial.println("");
+
+        nfc.startPassiveTargetIDDetection(PN532_MIFARE_ISO14443A);
+        rfid_tag_present = false;
+    }
+
     accelGyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
-    int angle = (int) (-ay > 0 ? (90.0*(min(-ay, 16000.0) / 16000.0))
-                       : (90.0*(max(-ay, -16000.0) / 16000.0)));
+    int angle = (int) (-ay > 0 ? (90.0 * (min(-ay, 16000.0) / 16000.0))
+                               : (90.0 * (max(-ay, -16000.0) / 16000.0)));
 
     // if upsidedown
     angle = ax < -1000 ? 180 : angle;
