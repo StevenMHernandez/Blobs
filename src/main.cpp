@@ -85,12 +85,13 @@ b2Body **the_bodies;
 bool was_upside_down = false;
 bool is_upside_down = false;
 
-#define SHARP_SCK  13
-#define SHARP_MOSI 11
+#define SHARP_SCK  52
+#define SHARP_MOSI 51
 #define SHARP_SS   10
 
-Adafruit_SharpMem display_raw(SHARP_SCK, SHARP_MOSI, SHARP_SS, 320, 240); // used to compute gaussian blur
-Adafruit_SharpMem display_final(SHARP_SCK, SHARP_MOSI, SHARP_SS, 320, 240); // used to render on screen
+//Adafruit_SharpMem display_raw(SHARP_SCK, SHARP_MOSI, SHARP_SS, 320, 240); // used to compute gaussian blur
+Adafruit_SharpMem display_raw(SHARP_SCK, SHARP_MOSI, SHARP_SS, 144, 168); // used to compute gaussian blur
+//Adafruit_SharpMem display_final(SHARP_SCK, SHARP_MOSI, SHARP_SS, 320, 240); // used to render on screen
 
 float one_d_kernel[] = {0.132429, 0.125337, 0.106259, 0.080693, 0.054891, 0.033446, 0.018255, 0.008925, 0.003908,
                         0.001533, 0.000539};
@@ -184,7 +185,7 @@ void initialize_box2d_objects() {
         bodyDef.type = b2_dynamicBody;
         bodyDef.allowSleep = true;
         bodyDef.awake = true;
-        bodyDef.position.Set((float32) i + 2, 6.0f);
+        bodyDef.position.Set((float32) ((i + 1) % 16), 6.0f);
         the_bodies[i] = world.CreateBody(&bodyDef);
         b2CircleShape circle;
         circle.m_radius = i == MAIN_CIRCLE_INDEX ? 1.1f : 0.45f;
@@ -274,7 +275,7 @@ void setup() {
     accelGyro.initialize();
 
     display_raw.begin();
-    display_final.begin();
+//    display_final.begin();
 
     initialize_box2d_objects();
 
@@ -284,8 +285,8 @@ void setup() {
 void loop() {
     accelGyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
-    int angle = (int) (ay > 0 ? (90.0*(min(ay, 16000.0) / 16000.0))
-                       : (90.0*(max(ay, -16000.0) / 16000.0)));
+    int angle = (int) (-ay > 0 ? (90.0*(min(-ay, 16000.0) / 16000.0))
+                       : (90.0*(max(-ay, -16000.0) / 16000.0)));
 
     // if upsidedown
     angle = ax < -1000 ? 180 : angle;
@@ -350,6 +351,8 @@ void loop() {
     render_circles();
 //    gaussian_blur_all();
     render_face();
+    display_raw.refresh();
+    delay(100);
 
     /*
      * Final
