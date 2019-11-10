@@ -11,6 +11,8 @@
 #include <Adafruit_SharpMem.h>
 #include "Arduino.h"
 #include <Adafruit_PN532.h>
+#include "SdFat.h"
+#include "sdios.h"
 
 // Weak empty variant initialization function.
 // May be redefined by variant files.
@@ -54,6 +56,8 @@ int main(void) {
 
 
 
+#define SD_SS SDCARD_SS_PIN
+SdFat sd;
 
 #define PN532_IRQ   (4)
 #define PN532_SCK  (13)
@@ -298,17 +302,35 @@ void setup() {
     attachInterrupt(digitalPinToInterrupt(PN532_IRQ), handleInterruptFalling, FALLING);
     nfc.begin();
     nfc.SAMConfig();
+
+    if (!sd.begin(SD_SS, SD_SCK_MHZ(50))) {
+        sd.initErrorHalt();
+    }
 }
 
 int t = 0;
+char line[100];
+bool message_exists = false;
 void loop() {
     uint8_t uid[] = {0, 0, 0, 0, 0, 0, 0};
     uint8_t uidLength;
 
     if (t % 10 == 0 && rfid_tag_present) {
         nfc.readDetectedPassiveTargetID(uid, &uidLength);
-        nfc.PrintHex(uid, uidLength);
-        Serial.println("");
+
+        char filename[50];
+        sprintf(filename, "0x%02X/0x%02X/0x%02X/0x%02X/0x%02X/0x%02X/0x%02X/msg.txt", uid[0], uid[1], uid[2], uid[3], uid[4], uid[5], uid[6]);
+
+        Serial.print("opening: ");
+        Serial.println(filename);
+
+        SdFile rdfile(filename, O_RDONLY);
+        if (!rdfile.isOpen()) {
+            Serial.println("can't open file. Does it exist?");
+        }
+        rdfile.fgets(line, sizeof(line));
+        message_exists = true;
+        Serial.println(line);
 
         nfc.startPassiveTargetIDDetection(PN532_MIFARE_ISO14443A);
         rfid_tag_present = false;
@@ -390,4 +412,5 @@ void loop() {
      */
     print_bitmap();
     Serial.println("======");
+    message_exists = false;
 }

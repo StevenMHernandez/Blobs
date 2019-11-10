@@ -70,3 +70,4 @@ include_directories(./.pio/libdeps/adafruit_grandcentral_m4/Adafruit\ GFX\ Libra
 include_directories(./.pio/libdeps/adafruit_grandcentral_m4/Adafruit\ SHARP\ Memory\ Display_ID414)
 include_directories(./.piolibdeps/Box2D)
 include_directories(./.pio/libdeps/adafruit_grandcentral_m4/Adafruit\ PN532/)
+include_directories(./.pio/libdeps/adafruit_grandcentral_m4/SdFat_ID322/src)
