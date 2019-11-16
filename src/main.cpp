@@ -97,58 +97,7 @@ bool is_upside_down = false;
 #define SHARP_MOSI 51
 #define SHARP_SS   10
 
-//Adafruit_SharpMem display_raw(SHARP_SCK, SHARP_MOSI, SHARP_SS, 320, 240); // used to compute gaussian blur
-Adafruit_SharpMem display_raw(SHARP_SCK, SHARP_MOSI, SHARP_SS, 144, 168); // used to compute gaussian blur
-//Adafruit_SharpMem display_final(SHARP_SCK, SHARP_MOSI, SHARP_SS, 320, 240); // used to render on screen
-
-float one_d_kernel[] = {0.132429, 0.125337, 0.106259, 0.080693, 0.054891, 0.033446, 0.018255, 0.008925, 0.003908,
-                        0.001533, 0.000539};
-
-float image_sums[240][320];
-
-float gaussian_blur_i(int x, int y, bool is_horizontal) {
-    int d = is_horizontal ? x : y;
-    float out = 0;
-
-    out = 100.0f * image_sums[x][y] * one_d_kernel[0];
-
-    for (int i = 1; i < 11; i++) {
-        if (d - i > 0) {
-            int add_to_x = is_horizontal ? -i : 0;
-            int add_to_y = !is_horizontal ? -i : 0;
-            out += 100.0f * image_sums[x + add_to_x][y + add_to_y] * one_d_kernel[i];
-        }
-        if (d - i < (is_horizontal ? 320 : 240)) {
-            int add_to_x = is_horizontal ? i : 0;
-            int add_to_y = !is_horizontal ? i : 0;
-            out += 100.0f * image_sums[x + add_to_x][y + add_to_y] * one_d_kernel[i];
-        }
-    }
-
-    return out;
-}
-
-void gaussian_blur_all() {
-    // Setup Initial values
-    for (uint16_t i = 0; i < 240; i++) {
-        for (uint16_t j = 0; j < 320; j++) {
-            image_sums[i][j] = 100.0f * (float) display_raw.getPixel(i, j);
-        }
-    }
-    // Apply gaussian blur horizontally
-    for (uint16_t i = 0; i < 240; i++) {
-        for (uint16_t j = 0; j < 320; j++) {
-            image_sums[i][j] = gaussian_blur_i(i, j, true);
-        }
-    }
-    // Apply gaussian blur vertically and apply to display output buffer
-    for (uint16_t i = 0; i < 240; i++) {
-        for (uint16_t j = 0; j < 320; j++) {
-            float out = gaussian_blur_i(i, j, false);
-//            display_final.drawPixel(i, j, out > 20);
-        }
-    }
-}
+Adafruit_SharpMem display(SHARP_SCK, SHARP_MOSI, SHARP_SS, 320, 240);
 
 /*
  * Print a simple bitmap representation to the serial monitor for initial debugging
@@ -157,7 +106,7 @@ void print_bitmap() {
     int print_every_n = 8;
     for (uint16_t i = 239; i > 10; i -= print_every_n) {
         for (uint16_t j = 0; j < 310; j += print_every_n) {
-            Serial.print(display_raw.getPixel(j, i) ? "@" : "`");
+            Serial.print(display.getPixel(j, i) ? "@" : "`");
         }
         Serial.print("\n");
     }
@@ -213,29 +162,29 @@ void render_ground() {
     ground_edge.m_vertex1 = b2Mul(ground->GetTransform(), ground_edge.m_vertex1);
     ground_edge.m_vertex2 = b2Mul(ground->GetTransform(), ground_edge.m_vertex2);
 
-    display_raw.drawLine((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
-                         (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20), 1);
+    display.drawLine((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
+                     (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20), 1);
 
     int min_y_ground_vertex = is_upside_down ? max((int) (ground_edge.m_vertex1.y * 20),
                                                    (int) (ground_edge.m_vertex2.y * 20)) : min(
                                       (int) (ground_edge.m_vertex1.y * 20), (int) (ground_edge.m_vertex2.y * 20));
     if (!is_upside_down || min_y_ground_vertex < 240) {
-        display_raw.fillRect(0, is_upside_down ? min_y_ground_vertex : 0, 320,
+        display.fillRect(0, is_upside_down ? min_y_ground_vertex : 0, 320,
                              is_upside_down ? 240 - min_y_ground_vertex : min_y_ground_vertex, 1);
     }
-    display_raw.fillTriangle((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
-                             (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20),
-                             0, min_y_ground_vertex, 1);
-    display_raw.fillTriangle((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
-                             (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20),
-                             320, min_y_ground_vertex, 1);
+    display.fillTriangle((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
+                         (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20),
+                         0, min_y_ground_vertex, 1);
+    display.fillTriangle((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
+                         (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20),
+                         320, min_y_ground_vertex, 1);
 }
 
 void render_circles() {
     for (int i = 0; i < NUM_CIRCLES; ++i) {
         b2Vec2 position = the_bodies[i]->GetPosition();
-        display_raw.fillCircle((int) (position.x * 20.0f), (int) (position.y * 20.0f),
-                               (int) (i == MAIN_CIRCLE_INDEX ? 22 : 9), 1);
+        display.fillCircle((int) (position.x * 20.0f), (int) (position.y * 20.0f),
+                           (int) (i == MAIN_CIRCLE_INDEX ? 22 : 9), 1);
     }
 }
 
@@ -244,18 +193,18 @@ void render_face() {
     int multiplier = is_upside_down ? -1 : 1;
 
     // mouth
-    display_raw.drawCircle((int) (position.x * 20.0f) + (multiplier * 5),
+    display.drawCircle((int) (position.x * 20.0f) + (multiplier * 5),
                            (int) (position.y * 20.0f) + (multiplier * 5), 5, 0);
-    display_raw.fillRect((int) (position.x * 20.0f) + (multiplier * 5) - 5,
+    display.fillRect((int) (position.x * 20.0f) + (multiplier * 5) - 5,
                          (int) (position.y * 20.0f) + (multiplier * 5) - 3, 15, 9, 1);
 
-    display_raw.fillCircle((int) (position.x * 20.0f) + (multiplier * 14),
+    display.fillCircle((int) (position.x * 20.0f) + (multiplier * 14),
                            (int) (position.y * 20.0f) + (multiplier * 15), 8, 0);
-    display_raw.drawCircle((int) (position.x * 20.0f) + (multiplier * 14),
+    display.drawCircle((int) (position.x * 20.0f) + (multiplier * 14),
                            (int) (position.y * 20.0f) + (multiplier * 15), 8, 1);
-    display_raw.fillCircle((int) (position.x * 20.0f) + (multiplier * -1),
+    display.fillCircle((int) (position.x * 20.0f) + (multiplier * -1),
                            (int) (position.y * 20.0f) + (multiplier * 17), 8, 0);
-    display_raw.drawCircle((int) (position.x * 20.0f) + (multiplier * -1),
+    display.drawCircle((int) (position.x * 20.0f) + (multiplier * -1),
                            (int) (position.y * 20.0f) + (multiplier * 17), 8, 1);
 
     // pupils
@@ -271,9 +220,9 @@ void render_face() {
     if (is_looking_down) {
         up_down_movement -= 2;
     }
-    display_raw.fillCircle((int) (position.x * 20.0f) + (multiplier * 14) + left_movement,
+    display.fillCircle((int) (position.x * 20.0f) + (multiplier * 14) + left_movement,
                            (int) (position.y * 20.0f) + (multiplier * 15) + up_down_movement, 1, 1);
-    display_raw.fillCircle((int) (position.x * 20.0f) + (multiplier * -1) + left_movement,
+    display.fillCircle((int) (position.x * 20.0f) + (multiplier * -1) + left_movement,
                            (int) (position.y * 20.0f) + (multiplier * 17) + up_down_movement, 1, 1);
 }
 
@@ -290,8 +239,7 @@ void setup() {
 
     accelGyro.initialize();
 
-    display_raw.begin();
-//    display_final.begin();
+    display.begin();
 
     initialize_box2d_objects();
 
@@ -396,21 +344,21 @@ void loop() {
         }
     }
 
-
     world.Step(timeStep, velocityIterations, positionIterations);
 
-    display_raw.fillScreen(0);
+    /*
+     * Render
+     */
+    display.fillScreen(0);
     render_ground();
     render_circles();
-//    gaussian_blur_all();
     render_face();
-    display_raw.refresh();
-    delay(100);
+    if (message_exists && !is_upside_down) {
+        display.setCursor(9, 9);
+        display.setTextColor(1, 0);
+        display.println(line);
+    }
+    display.refresh();
 
-    /*
-     * Final
-     */
-    print_bitmap();
-    Serial.println("======");
     message_exists = false;
 }
