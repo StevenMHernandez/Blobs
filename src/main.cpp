@@ -7,52 +7,12 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <MPU6050.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SharpMem.h>
 #include "Arduino.h"
 #include <Adafruit_PN532.h>
 #include "SdFat.h"
 #include "sdios.h"
-
-// Weak empty variant initialization function.
-// May be redefined by variant files.
-void initVariant() __attribute__((weak));
-
-void initVariant() {}
-
-// Initialize C library
-extern "C" void __libc_init_array(void);
-
-/*
- * \brief Main entry point of Arduino application
- */
-int main(void) {
-    init();
-
-    __libc_init_array();
-
-    initVariant();
-
-    delay(1);
-
-#if defined(USE_TINYUSB)
-    Adafruit_TinyUSB_Core_init();
-#elif defined(USBCON)
-    USBDevice.init();
-    USBDevice.attach();
-#endif
-
-    setup();
-
-    for (;;) {
-        loop();
-        yield(); // yield run usb background task
-
-        if (serialEventRun) serialEventRun();
-    }
-
-    return 0;
-}
+#include "core.h"
+#include "renderer.h"
 
 
 
@@ -86,32 +46,12 @@ b2BodyDef border_def;
 b2BodyDef ground_def;
 b2Body *border;
 b2Body *ground;
-b2ChainShape chain;
 b2EdgeShape ground_edge;
+b2ChainShape chain;
 b2Body **the_bodies;
 
 bool was_upside_down = false;
 bool is_upside_down = false;
-
-#define SHARP_SCK  52
-#define SHARP_MOSI 51
-#define SHARP_SS   10
-
-Adafruit_SharpMem display(SHARP_SCK, SHARP_MOSI, SHARP_SS, 320, 240);
-
-/*
- * Print a simple bitmap representation to the serial monitor for initial debugging
- */
-void print_bitmap() {
-    int print_every_n = 4;
-    for (uint16_t i = 0; i < 240; i += print_every_n) {
-        for (uint16_t j = 0; j < 310; j += print_every_n) {
-            Serial.print(display.getPixel(j, i) ? "@" : "`");
-        }
-        Serial.print("\n");
-    }
-    Serial.flush();
-}
 
 void initialize_box2d_objects() {
     border_def.type = b2_staticBody;
@@ -156,85 +96,6 @@ void initialize_box2d_objects() {
     }
 }
 
-void render_ground() {
-    b2Fixture *f = ground->GetFixtureList();
-    ground_edge = *((b2EdgeShape *) f->GetShape());
-    ground_edge.m_vertex1 = b2Mul(ground->GetTransform(), ground_edge.m_vertex1);
-    ground_edge.m_vertex2 = b2Mul(ground->GetTransform(), ground_edge.m_vertex2);
-
-    display.drawLine(320 - (int) (ground_edge.m_vertex1.x * 20), 240 - (int) (ground_edge.m_vertex1.y * 20),
-                     320 - (int) (ground_edge.m_vertex2.x * 20), 240 - (int) (ground_edge.m_vertex2.y * 20), 1);
-
-    int min_y_ground_vertex = min((int) (ground_edge.m_vertex1.y * 20),
-                                                   (int) (ground_edge.m_vertex2.y * 20));
-    Serial.println(ground_edge.m_vertex1.x * 20);
-    Serial.println(ground_edge.m_vertex2.x * 20);
-    Serial.println(":-:-:");
-    Serial.println(ground_edge.m_vertex1.y * 20);
-    Serial.println(ground_edge.m_vertex2.y * 20);
-    Serial.println(min_y_ground_vertex);
-    if (is_upside_down) {
-        display.fillRect(0, 0, 320, 240 - min_y_ground_vertex, 1);
-    }
-    if (!is_upside_down && min_y_ground_vertex > 0) {
-        display.fillRect(0, 240 - min_y_ground_vertex, 320, 240 - min_y_ground_vertex, 1);
-    }
-    if (!is_upside_down) {
-        display.fillTriangle(320 - (int) (ground_edge.m_vertex1.x * 20), 240 - (int) (ground_edge.m_vertex1.y * 20),
-                             320 - (int) (ground_edge.m_vertex2.x * 20), 240 - (int) (ground_edge.m_vertex2.y * 20),
-                             (int) (ground_edge.m_vertex1.x * 20), 240 - min_y_ground_vertex, 1);
-        display.fillTriangle(320 - (int) (ground_edge.m_vertex1.x * 20), 240 - (int) (ground_edge.m_vertex1.y * 20),
-                             320 - (int) (ground_edge.m_vertex2.x * 20), 240 - (int) (ground_edge.m_vertex2.y * 20),
-                             (int) (ground_edge.m_vertex2.x * 20), 240 - min_y_ground_vertex, 1);
-    }
-}
-
-void render_circles() {
-    for (int i = 0; i < NUM_CIRCLES; ++i) {
-        b2Vec2 position = the_bodies[i]->GetPosition();
-        display.fillCircle(320 - (int) (position.x * 20.0f), 240 - (int) (position.y * 20.0f),
-                           (int) (i == MAIN_CIRCLE_INDEX ? 22 : 9), 1);
-    }
-}
-
-void render_face() {
-    b2Vec2 position = the_bodies[MAIN_CIRCLE_INDEX]->GetPosition();
-    int multiplier = is_upside_down ? 1 : -1;
-
-    // mouth
-    display.drawCircle(320 - (int) (position.x * 20.0f) + (multiplier * 5),
-                       240 - (int) (position.y * 20.0f) + (multiplier * 5), 5, 0);
-    display.fillRect(320 - (int) (position.x * 20.0f) + (multiplier * 5) - 5,
-                     240 - (int) (position.y * 20.0f) + (multiplier * 5) - (is_upside_down ? 3 : 6), 15, 9, 1);
-
-    display.fillCircle(320 - (int) (position.x * 20.0f) + (multiplier * 14),
-                       240 - (int) (position.y * 20.0f) + (multiplier * 15), 8, 0);
-    display.drawCircle(320 - (int) (position.x * 20.0f) + (multiplier * 14),
-                       240 - (int) (position.y * 20.0f) + (multiplier * 15), 8, 1);
-    display.fillCircle(320 - (int) (position.x * 20.0f) + (multiplier * -1),
-                       240 - (int) (position.y * 20.0f) + (multiplier * 17), 8, 0);
-    display.drawCircle(320 - (int) (position.x * 20.0f) + (multiplier * -1),
-                       240 - (int) (position.y * 20.0f) + (multiplier * 17), 8, 1);
-
-    // pupils
-    bool is_looking_up = false;
-    bool is_looking_down = false;
-    bool is_looking_backwards = false;
-
-    int left_movement = is_looking_backwards ? -2 : 2;
-    int up_down_movement = 0;
-    if (is_looking_up) {
-        up_down_movement += 2;
-    }
-    if (is_looking_down) {
-        up_down_movement -= 2;
-    }
-    display.fillCircle(320 - (int) (position.x * 20.0f) + (multiplier * 14) + left_movement,
-                       240 - (int) (position.y * 20.0f) + (multiplier * 15) + up_down_movement, 1, 1);
-    display.fillCircle(320 - (int) (position.x * 20.0f) + (multiplier * -1) + left_movement,
-                       240 - (int) (position.y * 20.0f) + (multiplier * 17) + up_down_movement, 1, 1);
-}
-
 bool rfid_tag_present = false;
 void handleInterruptFalling() {
     rfid_tag_present = true;
@@ -248,7 +109,7 @@ void setup() {
 
     accelGyro.initialize();
 
-    display.begin();
+    setup_renderer();
 
     initialize_box2d_objects();
 
@@ -359,16 +220,7 @@ void loop() {
     /*
      * Render
      */
-    display.fillScreen(0);
-    render_ground();
-    render_circles();
-    render_face();
-    if (message_exists && !is_upside_down) {
-        display.setCursor(9, 9);
-        display.setTextColor(1, 0);
-        display.println(line);
-    }
-    display.refresh();
+    render_all(ground, is_upside_down, NUM_CIRCLES, MAIN_CIRCLE_INDEX, the_bodies, message_exists, line);
 
     print_bitmap();
     Serial.println("==========");
