@@ -103,8 +103,8 @@ Adafruit_SharpMem display(SHARP_SCK, SHARP_MOSI, SHARP_SS, 320, 240);
  * Print a simple bitmap representation to the serial monitor for initial debugging
  */
 void print_bitmap() {
-    int print_every_n = 8;
-    for (uint16_t i = 239; i > 10; i -= print_every_n) {
+    int print_every_n = 4;
+    for (uint16_t i = 0; i < 240; i += print_every_n) {
         for (uint16_t j = 0; j < 310; j += print_every_n) {
             Serial.print(display.getPixel(j, i) ? "@" : "`");
         }
@@ -162,50 +162,59 @@ void render_ground() {
     ground_edge.m_vertex1 = b2Mul(ground->GetTransform(), ground_edge.m_vertex1);
     ground_edge.m_vertex2 = b2Mul(ground->GetTransform(), ground_edge.m_vertex2);
 
-    display.drawLine((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
-                     (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20), 1);
+    display.drawLine(320 - (int) (ground_edge.m_vertex1.x * 20), 240 - (int) (ground_edge.m_vertex1.y * 20),
+                     320 - (int) (ground_edge.m_vertex2.x * 20), 240 - (int) (ground_edge.m_vertex2.y * 20), 1);
 
-    int min_y_ground_vertex = is_upside_down ? max((int) (ground_edge.m_vertex1.y * 20),
-                                                   (int) (ground_edge.m_vertex2.y * 20)) : min(
-                                      (int) (ground_edge.m_vertex1.y * 20), (int) (ground_edge.m_vertex2.y * 20));
-    if (!is_upside_down || min_y_ground_vertex < 240) {
-        display.fillRect(0, is_upside_down ? min_y_ground_vertex : 0, 320,
-                             is_upside_down ? 240 - min_y_ground_vertex : min_y_ground_vertex, 1);
+    int min_y_ground_vertex = min((int) (ground_edge.m_vertex1.y * 20),
+                                                   (int) (ground_edge.m_vertex2.y * 20));
+    Serial.println(ground_edge.m_vertex1.x * 20);
+    Serial.println(ground_edge.m_vertex2.x * 20);
+    Serial.println(":-:-:");
+    Serial.println(ground_edge.m_vertex1.y * 20);
+    Serial.println(ground_edge.m_vertex2.y * 20);
+    Serial.println(min_y_ground_vertex);
+    if (is_upside_down) {
+        display.fillRect(0, 0, 320, 240 - min_y_ground_vertex, 1);
     }
-    display.fillTriangle((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
-                         (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20),
-                         0, min_y_ground_vertex, 1);
-    display.fillTriangle((int) (ground_edge.m_vertex1.x * 20), (int) (ground_edge.m_vertex1.y * 20),
-                         (int) (ground_edge.m_vertex2.x * 20), (int) (ground_edge.m_vertex2.y * 20),
-                         320, min_y_ground_vertex, 1);
+    if (!is_upside_down && min_y_ground_vertex > 0) {
+        display.fillRect(0, 240 - min_y_ground_vertex, 320, 240 - min_y_ground_vertex, 1);
+    }
+    if (!is_upside_down) {
+        display.fillTriangle(320 - (int) (ground_edge.m_vertex1.x * 20), 240 - (int) (ground_edge.m_vertex1.y * 20),
+                             320 - (int) (ground_edge.m_vertex2.x * 20), 240 - (int) (ground_edge.m_vertex2.y * 20),
+                             (int) (ground_edge.m_vertex1.x * 20), 240 - min_y_ground_vertex, 1);
+        display.fillTriangle(320 - (int) (ground_edge.m_vertex1.x * 20), 240 - (int) (ground_edge.m_vertex1.y * 20),
+                             320 - (int) (ground_edge.m_vertex2.x * 20), 240 - (int) (ground_edge.m_vertex2.y * 20),
+                             (int) (ground_edge.m_vertex2.x * 20), 240 - min_y_ground_vertex, 1);
+    }
 }
 
 void render_circles() {
     for (int i = 0; i < NUM_CIRCLES; ++i) {
         b2Vec2 position = the_bodies[i]->GetPosition();
-        display.fillCircle((int) (position.x * 20.0f), (int) (position.y * 20.0f),
+        display.fillCircle(320 - (int) (position.x * 20.0f), 240 - (int) (position.y * 20.0f),
                            (int) (i == MAIN_CIRCLE_INDEX ? 22 : 9), 1);
     }
 }
 
 void render_face() {
     b2Vec2 position = the_bodies[MAIN_CIRCLE_INDEX]->GetPosition();
-    int multiplier = is_upside_down ? -1 : 1;
+    int multiplier = is_upside_down ? 1 : -1;
 
     // mouth
-    display.drawCircle((int) (position.x * 20.0f) + (multiplier * 5),
-                           (int) (position.y * 20.0f) + (multiplier * 5), 5, 0);
-    display.fillRect((int) (position.x * 20.0f) + (multiplier * 5) - 5,
-                         (int) (position.y * 20.0f) + (multiplier * 5) - 3, 15, 9, 1);
+    display.drawCircle(320 - (int) (position.x * 20.0f) + (multiplier * 5),
+                       240 - (int) (position.y * 20.0f) + (multiplier * 5), 5, 0);
+    display.fillRect(320 - (int) (position.x * 20.0f) + (multiplier * 5) - 5,
+                     240 - (int) (position.y * 20.0f) + (multiplier * 5) - (is_upside_down ? 3 : 6), 15, 9, 1);
 
-    display.fillCircle((int) (position.x * 20.0f) + (multiplier * 14),
-                           (int) (position.y * 20.0f) + (multiplier * 15), 8, 0);
-    display.drawCircle((int) (position.x * 20.0f) + (multiplier * 14),
-                           (int) (position.y * 20.0f) + (multiplier * 15), 8, 1);
-    display.fillCircle((int) (position.x * 20.0f) + (multiplier * -1),
-                           (int) (position.y * 20.0f) + (multiplier * 17), 8, 0);
-    display.drawCircle((int) (position.x * 20.0f) + (multiplier * -1),
-                           (int) (position.y * 20.0f) + (multiplier * 17), 8, 1);
+    display.fillCircle(320 - (int) (position.x * 20.0f) + (multiplier * 14),
+                       240 - (int) (position.y * 20.0f) + (multiplier * 15), 8, 0);
+    display.drawCircle(320 - (int) (position.x * 20.0f) + (multiplier * 14),
+                       240 - (int) (position.y * 20.0f) + (multiplier * 15), 8, 1);
+    display.fillCircle(320 - (int) (position.x * 20.0f) + (multiplier * -1),
+                       240 - (int) (position.y * 20.0f) + (multiplier * 17), 8, 0);
+    display.drawCircle(320 - (int) (position.x * 20.0f) + (multiplier * -1),
+                       240 - (int) (position.y * 20.0f) + (multiplier * 17), 8, 1);
 
     // pupils
     bool is_looking_up = false;
@@ -220,10 +229,10 @@ void render_face() {
     if (is_looking_down) {
         up_down_movement -= 2;
     }
-    display.fillCircle((int) (position.x * 20.0f) + (multiplier * 14) + left_movement,
-                           (int) (position.y * 20.0f) + (multiplier * 15) + up_down_movement, 1, 1);
-    display.fillCircle((int) (position.x * 20.0f) + (multiplier * -1) + left_movement,
-                           (int) (position.y * 20.0f) + (multiplier * 17) + up_down_movement, 1, 1);
+    display.fillCircle(320 - (int) (position.x * 20.0f) + (multiplier * 14) + left_movement,
+                       240 - (int) (position.y * 20.0f) + (multiplier * 15) + up_down_movement, 1, 1);
+    display.fillCircle(320 - (int) (position.x * 20.0f) + (multiplier * -1) + left_movement,
+                       240 - (int) (position.y * 20.0f) + (multiplier * 17) + up_down_movement, 1, 1);
 }
 
 bool rfid_tag_present = false;
@@ -244,6 +253,7 @@ void setup() {
     initialize_box2d_objects();
 
     ground->SetAngularVelocity(0.0075);
+    ground->SetTransform(b2Vec2(8, 4.0f), 0);
 
     pinMode(PN532_IRQ, INPUT_PULLUP);
     nfc.startPassiveTargetIDDetection(PN532_MIFARE_ISO14443A);
@@ -359,6 +369,9 @@ void loop() {
         display.println(line);
     }
     display.refresh();
+
+    print_bitmap();
+    Serial.println("==========");
 
     message_exists = false;
 }
