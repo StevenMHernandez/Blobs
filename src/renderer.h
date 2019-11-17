@@ -15,7 +15,6 @@ void setup_renderer() {
     display.begin();
 }
 
-
 /*
  * Print a simple bitmap representation to the serial monitor for initial debugging
  */
@@ -103,7 +102,7 @@ void render_face(int main_circle_index, b2Body **circle_bodies, boolean is_upsid
                        240 - (int) (position.y * 20.0f) + (multiplier * 17) + up_down_movement, 1, 1);
 }
 
-void render_all(b2Body *ground, boolean is_upside_down, int number_of_circles, int main_circle_index, b2Body **circle_bodies, boolean message_exists, char *line) {
+void render_all(b2Body *ground, boolean is_upside_down, int number_of_circles, int main_circle_index, b2Body **circle_bodies, boolean message_exists, char *line, boolean render_to_serial_monitor) {
     display.fillScreen(0);
     render_ground(ground, is_upside_down);
     render_circles(number_of_circles, main_circle_index, circle_bodies);
@@ -114,6 +113,11 @@ void render_all(b2Body *ground, boolean is_upside_down, int number_of_circles, i
         display.println(line);
     }
     display.refresh();
+
+    if (render_to_serial_monitor) {
+        print_bitmap();
+        Serial.println("==========");
+    }
 }
 
 #endif //BLOBS_RENDERER_H
