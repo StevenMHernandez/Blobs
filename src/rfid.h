@@ -24,11 +24,12 @@ void setup_rfid() {
     nfc.SAMConfig();
 }
 
+char filename[50];
 void rfid_update(int t, char msg[], boolean *message_exists) {
     uint8_t uid[] = {0, 0, 0, 0, 0, 0, 0};
     uint8_t uidLength;
 
-    if (t % 10 == 0 && rfid_tag_present) {
+    if (rfid_tag_present) {
         nfc.readDetectedPassiveTargetID(uid, &uidLength);
 
         char filename[50];
@@ -40,13 +41,22 @@ void rfid_update(int t, char msg[], boolean *message_exists) {
         SdFile rdfile(filename, O_RDONLY);
         if (!rdfile.isOpen()) {
             Serial.println("can't open file. Does it exist?");
+            sprintf(msg, "Unknown:%s", filename);
+            *message_exists = true;
+        } else {
+            rdfile.fgets(msg, 100 * sizeof(char));
+            *message_exists = true;
         }
-        rdfile.fgets(msg, 100 * sizeof(char));
-        *message_exists = true;
         Serial.println(msg);
 
         nfc.startPassiveTargetIDDetection(PN532_MIFARE_ISO14443A);
         rfid_tag_present = false;
+    } else {
+        *message_exists = false;
+    }
+
+    if (t == 0) {
+        *message_exists = false;
     }
 }
 

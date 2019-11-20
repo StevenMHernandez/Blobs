@@ -50,5 +50,5 @@ void loop() {
     accelGyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
     physics_update(ay, ax);
     render_all(ground, is_upside_down, NUM_CIRCLES, MAIN_CIRCLE_INDEX, the_bodies, message_exists, msg, RENDER_TO_SERIAL_MONITOR);
-    message_exists = false;
+    t++;
 }

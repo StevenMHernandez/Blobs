@@ -108,7 +108,7 @@ void render_all(b2Body *ground, boolean is_upside_down, int number_of_circles, i
     render_circles(number_of_circles, main_circle_index, circle_bodies);
     render_face(main_circle_index, circle_bodies, is_upside_down);
     if (message_exists && !is_upside_down) {
-        display.setCursor(9, 9);
+        display.setCursor(15, 20);
         display.setTextColor(1, 0);
         display.println(line);
     }
